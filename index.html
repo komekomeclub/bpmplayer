@@ -1,205 +1,672 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>コンパス方向線マップ</title>
-
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
-    <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-        #map {
-            width: 100%;
-            height: 100%;
-        }
-        /* 左下の丸いコンパスボタン */
-        #compassBtn {
-            position: absolute;
-            left: 10px;
-            bottom: 80px;           /* 位置取得ボタンの上に被らないように */
-            width: 56px;
-            height: 56px;
-            background: white;
-            border-radius: 50%;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            user-select: none;
-        }
-        #compassBtn:active {
-            background: #f0f0f0;
-        }
-    </style>
-</head>
-<body>
-
-<div id="map"></div>
-
-<!-- コンパスボタン -->
-<div id="compassBtn" title="方向線を表示/非表示">🧭</div>
-
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<script>
-// 変数
-let map;
-let userMarker;
-let directionLine = null;        // 方向線（Polyline）
-let isLineVisible = false;
-let currentHeading = 0;          // 現在の向いている方向（度）
-
-// 地図初期化
-function initMap() {
-    map = L.map('map').setView([35.681, 139.767], 16);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    // 現在地取得
-    map.locate({ setView: true, maxZoom: 18, watch: true });
-}
-
-// 位置取得成功時
-function onLocationFound(e) {
-    const radius = e.accuracy / 2;
-
-    if (!userMarker) {
-        userMarker = L.circle(e.latlng, radius).addTo(map);
-        L.marker(e.latlng).addTo(map)
-            .bindPopup("あなたはここ")
-            .openPopup();
-    } else {
-        userMarker.setLatLng(e.latlng);
-        userMarker.setRadius(radius);
-        map.setView(e.latlng);
-    }
-
-    // 現在地が取れたらコンパスイベントを有効化
-    enableCompass();
-}
-
-// 位置取得エラー
-function onLocationError(e) {
-    alert(e.message);
-}
-
-// コンパス（DeviceOrientation）の有効化
-function enableCompass() {
-    if (window.DeviceOrientationEvent) {
-        window.addEventListener('deviceorientation', handleOrientation);
-        
-        // iOS 13+ は許可が必要
-        if (DeviceOrientationEvent.requestPermission) {
-            document.getElementById('compassBtn').addEventListener('click', requestCompassPermission);
-        }
-    } else {
-        alert("この端末はコンパスに対応していません");
-    }
-}
-
-function requestCompassPermission() {
-    DeviceOrientationEvent.requestPermission()
-        .then(response => {
-            if (response === 'granted') {
-                window.addEventListener('deviceorientation', handleOrientation);
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>TempoFlow BPM Player</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#f0f9ff',
+                100: '#e0f2fe',
+                400: '#38bdf8',
+                500: '#0ea5e9',
+                600: '#0284c7',
+                900: '#0c4a6e',
+                950: '#082f49',
+              }
+            },
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }
-        })
-        .catch(console.error);
-}
-
-// 方向が変わったとき
-function handleOrientation(event) {
-    if (event.alpha !== null) {
-        // iOS と Android で向きの計算が少し違うが、webkitCompassHeading があればそれを使う
-        if (event.webkitCompassHeading !== undefined) {
-            currentHeading = event.webkitCompassHeading;  // iOS
-        } else {
-            currentHeading = 360 - event.alpha;           // Android（大体合ってる）
+          }
         }
+      }
+    </script>
 
-        // 線が表示されている状態ならリアルタイムで更新
-        if (isLineVisible && userMarker) {
-            drawDirectionLine();
-        }
-    }
+    <!-- React & Babel Setup for In-Browser Compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none; background-color: #0ea5e9;
+        height: 1.25rem; width: 1.25rem; border-radius: 50%; cursor: pointer; margin-top: -0.25rem;
+      }
+      input[type="range"]::-moz-range-thumb {
+        background-color: #0ea5e9; height: 1.25rem; width: 1.25rem; border-radius: 50%; border: none; cursor: pointer;
+      }
+      /* Prevent text selection for app-like feel */
+      body { -webkit-user-select: none; user-select: none; }
+      
+      /* Error overlay styles */
+      #startup-error {
+          display: none;
+          position: fixed;
+          top: 0; left: 0; width: 100%; height: 100%;
+          background: #0f172a;
+          color: #ef4444;
+          z-index: 9999;
+          padding: 2rem;
+          overflow: auto;
+          font-family: monospace;
+      }
+    </style>
+
+    <!-- Import Map for Modules -->
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.292.0",
+    "web-audio-beat-detector": "https://esm.sh/web-audio-beat-detector@8.2.9",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
 }
-
-// 方向線を描く（1000m先まで）
-function drawDirectionLine() {
-    if (!userMarker) return;
-
-    const center = userMarker.getLatLng();
-    const distance = 1000000; // 1km先まで（十分長い）
-
-    // 目的地の緯度経度を計算（簡易版：地球を平面と仮定）
-    const bearing = currentHeading;
-    const R = 6371000; // 地球の半径（m）
-    const rad = bearing * Math.PI / 180;
-
-    const lat1 = center.lat * Math.PI / 180;
-    const lon1 = center.lng * Math.PI / 180;
-
-    const lat2 = Math.asin(
-        Math.sin(lat1) * Math.cos(distance / R) +
-        Math.cos(lat1) * Math.sin(distance / R) * Math.cos(rad)
-    );
-    const lon2 = lon1 + Math.atan2(
-        Math.sin(rad) * Math.sin(distance / R) * Math.cos(lat1),
-        Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2)
-    );
-
-    const endLatLng = L.latLng(lat2 * 180 / Math.PI, lon2 * 180 / Math.PI);
-
-    if (directionLine) {
-        directionLine.setLatLngs([center, endLatLng]);
-    } else {
-        directionLine = L.polyline([center, endLatLng], {
-            color: 'orange',
-            weight: 6,
-            opacity: 0.9
-        }).addTo(map);
-    }
-}
-
-// ボタンクリックでトグル
-document.getElementById('compassBtn').addEventListener('click', function() {
-    if (!userMarker) {
-        alert("現在地がまだ取得できていません");
-        return;
-    }
-
-    isLineVisible = !isLineVisible;
-
-    if (isLineVisible) {
-        drawDirectionLine();
-        this.style.background = '#fff3e0';
-    } else {
-        if (directionLine) {
-            map.removeLayer(directionLine);
-            directionLine = null;
-        }
-        this.style.background = 'white';
-    }
-});
-
-// イベント登録
-map.on('locationfound', onLocationFound);
-map.on('locationerror', onLocationError);
-
-// 地図初期化
-initMap();
-
 </script>
+
+    <!-- Global Error Handler -->
+    <script>
+      window.addEventListener('error', function(event) {
+        const errorBox = document.getElementById('startup-error');
+        if (errorBox) {
+          errorBox.style.display = 'block';
+          const msg = document.createElement('div');
+          msg.style.marginBottom = '1rem';
+          msg.style.borderBottom = '1px solid #333';
+          msg.style.paddingBottom = '0.5rem';
+          msg.textContent = `Error: ${event.message} at ${event.filename}:${event.lineno}`;
+          errorBox.appendChild(msg);
+        }
+      });
+      
+      window.addEventListener('unhandledrejection', function(event) {
+        const errorBox = document.getElementById('startup-error');
+        if (errorBox) {
+            errorBox.style.display = 'block';
+            const msg = document.createElement('div');
+            msg.style.marginBottom = '1rem';
+            msg.textContent = `Promise Error: ${event.reason}`;
+            errorBox.appendChild(msg);
+        }
+      });
+    </script>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased overflow-hidden">
+    <div id="root"></div>
+    <div id="startup-error">
+        <h2 class="text-xl font-bold mb-4 text-white">Startup Failed</h2>
+        <p class="text-slate-400 mb-4">Please check the errors below.</p>
+        <div id="protocol-warning" class="hidden mb-6 p-4 bg-yellow-900/30 border border-yellow-700 rounded text-yellow-200">
+            <strong>Warning:</strong> You seem to be running this file directly (file:// protocol). 
+            Modern web apps require a local server to load modules securely. 
+            <br/><br/>
+            Try installing a "Web Server" app on your phone and opening the file through that.
+        </div>
+    </div>
+
+    <script>
+        if (window.location.protocol === 'file:') {
+            document.getElementById('startup-error').style.display = 'block';
+            document.getElementById('protocol-warning').classList.remove('hidden');
+        }
+    </script>
+
+    <!-- Main Application Code -->
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipForward, SkipBack, FastForward, Rewind, Music, Activity, FolderOpen, Settings2, Trash2 } from 'lucide-react';
+        import { analyze } from 'web-audio-beat-detector';
+
+        // --- Services: Audio Utils ---
+
+        let sharedAudioContext = null;
+
+        const getAudioContext = () => {
+            if (!sharedAudioContext) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                sharedAudioContext = new AudioContextClass();
+            }
+            return sharedAudioContext;
+        };
+
+        const detectBpm = async (file) => {
+            const audioCtx = getAudioContext();
+            
+            // Ensure context is running (important for some browsers)
+            if (audioCtx.state === 'suspended') {
+                try {
+                    await audioCtx.resume();
+                } catch (e) {
+                    console.warn("Could not resume audio context automatically", e);
+                }
+            }
+
+            try {
+                const bpmPromise = (async () => {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                    const bpm = await analyze(audioBuffer);
+                    return Math.round(bpm);
+                })();
+
+                // 30 seconds timeout
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error("Analysis timed out (30s)")), 30000);
+                });
+
+                return await Promise.race([bpmPromise, timeoutPromise]);
+            } catch (e) {
+                console.error("BPM Detection failed for file:", file.name, e);
+                return 0;
+            }
+        };
+
+        // --- Components: PlayerControls ---
+
+        const PlayerControls = ({
+            isPlaying,
+            onPlayPause,
+            onNext,
+            onPrev,
+            onSeek,
+            currentSongName,
+            currentBpm,
+            progress,
+            duration,
+            currentTime
+        }) => {
+            const formatTime = (time) => {
+                if (isNaN(time)) return "0:00";
+                const m = Math.floor(time / 60);
+                const s = Math.floor(time % 60);
+                return `${m}:${s < 10 ? '0' : ''}${s}`;
+            };
+            
+            // Ensure values are strings or numbers, never objects
+            const displayName = typeof currentSongName === 'string' ? currentSongName : "No song selected";
+            const displayBpm = typeof currentBpm === 'number' && currentBpm > 0 ? `${currentBpm} BPM` : '-- BPM';
+
+            return (
+                <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 pb-safe pt-2 px-4 shadow-2xl z-50 pb-6 md:pb-2">
+                    <div className="flex justify-between items-center mb-2 px-1">
+                        <div className="overflow-hidden w-2/3">
+                            <h3 className="text-white font-medium truncate text-sm">
+                                {displayName}
+                            </h3>
+                            <p className="text-brand-400 text-xs font-bold">
+                                {displayBpm}
+                            </p>
+                        </div>
+                        <div className="text-slate-400 text-xs font-mono">
+                           {formatTime(currentTime)} / {formatTime(duration)}
+                        </div>
+                    </div>
+
+                    <div className="w-full h-1 bg-slate-800 rounded-full mb-4 relative overflow-hidden">
+                        <div 
+                            className="absolute top-0 left-0 h-full bg-brand-500 transition-all duration-300 ease-linear"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+
+                    <div className="flex justify-between items-center mb-4 max-w-md mx-auto w-full px-2">
+                        <button 
+                            onClick={() => onSeek(-5)}
+                            className="text-slate-400 hover:text-white transition-colors flex flex-col items-center gap-1 active:scale-90"
+                        >
+                            <Rewind size={20} />
+                            <span className="text-[10px]">-5s</span>
+                        </button>
+
+                         <button 
+                            onClick={onPrev}
+                            className="text-slate-300 hover:text-white transition-colors active:scale-90"
+                        >
+                            <SkipBack size={28} />
+                        </button>
+
+                        <button 
+                            onClick={onPlayPause}
+                            className="w-14 h-14 bg-brand-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-brand-500/30 active:scale-95 transition-transform"
+                        >
+                            {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1"/>}
+                        </button>
+
+                        <button 
+                            onClick={onNext}
+                            className="text-slate-300 hover:text-white transition-colors active:scale-90"
+                        >
+                            <SkipForward size={28} />
+                        </button>
+
+                        <button 
+                            onClick={() => onSeek(5)}
+                            className="text-slate-400 hover:text-white transition-colors flex flex-col items-center gap-1 active:scale-90"
+                        >
+                            <FastForward size={20} />
+                            <span className="text-[10px]">+5s</span>
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Components: TrackList (Renamed from SongList) ---
+
+        const TrackList = ({ songs, currentSongId, isPlaying, onSelect, minBpm, maxBpm }) => {
+            // Strictly primitive filtering
+            const matchedSongs = songs.filter(song => 
+                song.status === 'done' && 
+                song.bpm !== null && 
+                song.bpm >= minBpm && 
+                song.bpm <= maxBpm
+            );
+            
+            const otherSongs = songs.filter(song => 
+                !matchedSongs.includes(song)
+            );
+
+            const renderRow = (song, isDimmed) => {
+                const isCurrent = song.id === currentSongId;
+                const isAnalyzing = song.status === 'analyzing';
+                
+                return (
+                    <div 
+                        key={song.id}
+                        onClick={() => !isAnalyzing && onSelect(song)}
+                        className={`
+                            flex items-center p-3 mb-2 rounded-xl transition-all
+                            ${isCurrent ? 'bg-brand-900/40 border border-brand-500/30' : 'bg-slate-900 border border-slate-800'}
+                            ${isAnalyzing ? 'opacity-70 cursor-wait' : 'cursor-pointer active:scale-[0.98]'}
+                            ${isDimmed && !isCurrent ? 'opacity-40 grayscale' : ''}
+                        `}
+                    >
+                        <div className={`
+                            w-10 h-10 rounded-full flex items-center justify-center mr-3 shrink-0
+                            ${isCurrent ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-400'}
+                        `}>
+                            {isCurrent && isPlaying ? <Activity size={18} className="animate-pulse" /> : <Music size={18} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <h4 className={`text-sm font-medium truncate ${isCurrent ? 'text-brand-200' : 'text-slate-200'}`}>
+                                {song.name}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                {song.status === 'analyzing' ? (
+                                    <span className="text-xs text-brand-400 flex items-center gap-1">Analyzing...</span>
+                                ) : song.status === 'error' ? (
+                                    <span className="text-xs text-red-400">Failed</span>
+                                ) : (
+                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${isCurrent ? 'bg-brand-500/20 text-brand-300' : 'bg-slate-800 text-slate-400'}`}>
+                                        {song.bpm ? `${song.bpm} BPM` : 'Unknown'}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            if (songs.length === 0) {
+                return (
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                        <Music size={48} className="mb-4 opacity-20" />
+                        <p>No songs loaded.</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="pb-48 px-4">
+                    {matchedSongs.length > 0 && (
+                        <div className="mb-6">
+                            <h3 className="text-brand-400 text-xs font-bold uppercase tracking-wider mb-3 ml-1">
+                                Playing ({minBpm} - {maxBpm} BPM)
+                            </h3>
+                            {matchedSongs.map(s => renderRow(s, false))}
+                        </div>
+                    )}
+                    {otherSongs.length > 0 && (
+                        <div>
+                            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-3 ml-1">
+                                {matchedSongs.length > 0 ? "Skipped / Processing" : "All Songs"}
+                            </h3>
+                            {otherSongs.map(s => renderRow(s, matchedSongs.length > 0))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Main App Component ---
+
+        const App = () => {
+            const [songs, setSongs] = useState([]);
+            const [bpmRange, setBpmRange] = useState({ min: 100, max: 130 });
+            const [currentSongId, setCurrentSongId] = useState(null);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [progress, setProgress] = useState(0);
+            const [currentTime, setCurrentTime] = useState(0);
+            const [duration, setDuration] = useState(0);
+            const [analyzingCount, setAnalyzingCount] = useState(0);
+
+            const audioRef = useRef(null);
+            const processingQueueRef = useRef([]);
+            const isProcessingRef = useRef(false);
+
+            useEffect(() => {
+                const audio = new Audio();
+                audio.preload = "auto";
+                audioRef.current = audio;
+
+                const updateTime = () => {
+                    if (!audioRef.current) return;
+                    setCurrentTime(audioRef.current.currentTime);
+                    setDuration(audioRef.current.duration || 0);
+                    if (audioRef.current.duration) {
+                        setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+                    }
+                };
+
+                const handleEnded = () => playNext();
+
+                audio.addEventListener('timeupdate', updateTime);
+                audio.addEventListener('ended', handleEnded);
+                audio.addEventListener('error', (e) => console.error("Audio playback error", e));
+
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.setActionHandler('play', () => { audio.play(); setIsPlaying(true); });
+                    navigator.mediaSession.setActionHandler('pause', () => { audio.pause(); setIsPlaying(false); });
+                    navigator.mediaSession.setActionHandler('previoustrack', playPrev);
+                    navigator.mediaSession.setActionHandler('nexttrack', playNext);
+                    navigator.mediaSession.setActionHandler('seekbackward', () => seekRelative(-5));
+                    navigator.mediaSession.setActionHandler('seekforward', () => seekRelative(5));
+                }
+
+                return () => {
+                    audio.pause();
+                    audio.removeEventListener('timeupdate', updateTime);
+                    audio.removeEventListener('ended', handleEnded);
+                    audioRef.current = null;
+                };
+            }, []);
+
+            useEffect(() => {
+                const active = songs.find(s => s.id === currentSongId);
+                if (active && 'mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: active.name,
+                        artist: `${active.bpm ? active.bpm + ' BPM' : 'Analyzing...'}`,
+                        album: 'TempoFlow',
+                    });
+                }
+            }, [currentSongId, songs]);
+
+            const getFilteredPlaylist = useCallback(() => {
+                return songs.filter(s => 
+                    s.bpm !== null && 
+                    s.bpm >= bpmRange.min && 
+                    s.bpm <= bpmRange.max &&
+                    s.status === 'done'
+                );
+            }, [songs, bpmRange]);
+
+            const playSong = async (song) => {
+                if (!audioRef.current) return;
+                try {
+                    // Start/Resume AudioContext on user interaction (playback)
+                    const audioCtx = getAudioContext();
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+
+                    if (currentSongId !== song.id) {
+                        audioRef.current.src = song.url;
+                        setCurrentSongId(song.id);
+                    }
+                    await audioRef.current.play();
+                    setIsPlaying(true);
+                } catch (e) {
+                    console.error("Playback error", e);
+                }
+            };
+
+            const playNext = useCallback(() => {
+                const playlist = getFilteredPlaylist();
+                if (playlist.length === 0) return;
+                const currentIndex = playlist.findIndex(s => s.id === currentSongId);
+                let nextIndex = (currentIndex !== -1) ? (currentIndex + 1) % playlist.length : 0;
+                playSong(playlist[nextIndex]);
+            }, [currentSongId, getFilteredPlaylist]);
+
+            const playPrev = useCallback(() => {
+                const playlist = getFilteredPlaylist();
+                if (playlist.length === 0) return;
+                const currentIndex = playlist.findIndex(s => s.id === currentSongId);
+                let prevIndex = (currentIndex !== -1) ? (currentIndex - 1 + playlist.length) % playlist.length : playlist.length - 1;
+                playSong(playlist[prevIndex]);
+            }, [currentSongId, getFilteredPlaylist]);
+
+            const seekRelative = (seconds) => {
+                if (audioRef.current) {
+                    audioRef.current.currentTime = Math.min(Math.max(audioRef.current.currentTime + seconds, 0), audioRef.current.duration);
+                }
+            };
+
+            const togglePlayPause = () => {
+                if (!audioRef.current) return;
+                if (isPlaying) {
+                    audioRef.current.pause();
+                    setIsPlaying(false);
+                } else {
+                    if (!currentSongId) playNext();
+                    else {
+                        audioRef.current.play();
+                        setIsPlaying(true);
+                    }
+                }
+            };
+
+            const clearPlaylist = () => {
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current.src = "";
+                }
+                setSongs([]);
+                setCurrentSongId(null);
+                setIsPlaying(false);
+                setProgress(0);
+                setCurrentTime(0);
+                setDuration(0);
+                processingQueueRef.current = [];
+                setAnalyzingCount(0);
+            };
+
+            const processQueue = async () => {
+                if (processingQueueRef.current.length === 0) {
+                    isProcessingRef.current = false;
+                    setAnalyzingCount(0);
+                    return;
+                }
+                isProcessingRef.current = true;
+                const songToProcess = processingQueueRef.current[0];
+                setAnalyzingCount(processingQueueRef.current.length);
+                
+                setSongs(prev => prev.map(s => s.id === songToProcess.id ? { ...s, status: 'analyzing' } : s));
+
+                try {
+                    const bpm = await detectBpm(songToProcess.file);
+                    if (bpm > 0) {
+                        setSongs(prev => prev.map(s => s.id === songToProcess.id ? { ...s, bpm, status: 'done' } : s));
+                    } else {
+                        throw new Error("BPM 0");
+                    }
+                } catch (e) {
+                    setSongs(prev => prev.map(s => s.id === songToProcess.id ? { ...s, status: 'error' } : s));
+                } finally {
+                    processingQueueRef.current.shift();
+                    setTimeout(processQueue, 50);
+                }
+            };
+
+            const handleFileUpload = (event) => {
+                const files = event.target.files;
+                if (!files || files.length === 0) return;
+
+                // Important for iOS: Initialize AudioContext on user interaction (file select)
+                const ctx = getAudioContext();
+                if (ctx.state === 'suspended') {
+                    ctx.resume().catch(e => console.warn("Auto-resume failed", e));
+                }
+
+                const newSongs = [];
+                const queue = [];
+                Array.from(files).forEach((file) => {
+                    if (file.type.startsWith('audio/') || file.name.endsWith('.mp3') || file.name.endsWith('.wav')) {
+                        const song = {
+                            id: Math.random().toString(36).substring(7),
+                            file,
+                            name: file.name.replace(/\.[^/.]+$/, ""),
+                            url: URL.createObjectURL(file),
+                            bpm: null,
+                            status: 'pending',
+                            duration: 0
+                        };
+                        newSongs.push(song);
+                        queue.push(song);
+                    }
+                });
+                setSongs(prev => [...prev, ...newSongs]);
+                processingQueueRef.current = [...processingQueueRef.current, ...queue];
+                if (!isProcessingRef.current) processQueue();
+            };
+
+            // Calculate active song primitives for render
+            const activeSong = songs.find(s => s.id === currentSongId);
+            const activeName = activeSong ? activeSong.name : "";
+            const activeBpm = activeSong ? activeSong.bpm : undefined;
+
+            return (
+                <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-32">
+                    <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 py-4 shadow-xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h1 className="text-2xl font-bold bg-gradient-to-r from-brand-400 to-indigo-400 bg-clip-text text-transparent">
+                                TempoFlow
+                            </h1>
+                            <div className="flex items-center gap-2">
+                                {songs.length > 0 && (
+                                    <button 
+                                        onClick={clearPlaylist}
+                                        className="flex items-center gap-2 bg-slate-800 hover:bg-red-900/30 text-slate-300 hover:text-red-400 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition-colors border border-slate-700"
+                                    >
+                                        <Trash2 size={16} />
+                                        <span className="hidden sm:inline">Clear</span>
+                                    </button>
+                                )}
+                                <div className="relative overflow-hidden">
+                                    <input 
+                                        type="file" 
+                                        id="folder-upload"
+                                        className="hidden"
+                                        onChange={handleFileUpload}
+                                        webkitdirectory="" directory="" multiple=""
+                                    />
+                                    <label 
+                                        htmlFor="folder-upload"
+                                        className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-colors cursor-pointer shadow-lg shadow-brand-900/50"
+                                    >
+                                        <FolderOpen size={16} />
+                                        <span>Open Folder</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 shadow-inner">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2 text-brand-400">
+                                    <Settings2 size={16} />
+                                    <span className="text-xs font-bold uppercase tracking-wider">BPM Range</span>
+                                </div>
+                                <div className="text-sm font-mono text-white bg-slate-800 px-2 py-1 rounded">
+                                    {bpmRange.min} - {bpmRange.max}
+                                </div>
+                            </div>
+                            <div className="flex gap-4 items-center">
+                                <div className="flex-1">
+                                    <input 
+                                        type="range" min="60" max="200" value={bpmRange.min}
+                                        onChange={(e) => {
+                                            const val = Number(e.target.value);
+                                            setBpmRange(prev => ({ ...prev, min: Math.min(val, prev.max - 5) }));
+                                        }}
+                                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                    <div className="flex justify-between mt-1"><span className="text-[10px] text-slate-500">Slow (60)</span></div>
+                                </div>
+                                <div className="flex-1">
+                                    <input 
+                                        type="range" min="60" max="200" value={bpmRange.max}
+                                        onChange={(e) => {
+                                            const val = Number(e.target.value);
+                                            setBpmRange(prev => ({ ...prev, max: Math.max(val, prev.min + 5) }));
+                                        }}
+                                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                     <div className="flex justify-between mt-1"><span className="text-[10px] text-slate-500"></span><span className="text-[10px] text-slate-500">Fast (200)</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {analyzingCount > 0 && (
+                             <div className="mt-2 text-xs text-brand-400 animate-pulse text-center">
+                                Analyzing queue: {analyzingCount} songs remaining...
+                             </div>
+                        )}
+                    </header>
+
+                    <main className="pt-2">
+                         <TrackList 
+                            songs={songs}
+                            currentSongId={currentSongId}
+                            isPlaying={isPlaying}
+                            onSelect={playSong}
+                            minBpm={bpmRange.min}
+                            maxBpm={bpmRange.max}
+                         />
+                    </main>
+
+                    <PlayerControls 
+                         isPlaying={isPlaying}
+                         onPlayPause={togglePlayPause}
+                         onNext={playNext}
+                         onPrev={playPrev}
+                         onSeek={seekRelative}
+                         currentSongName={activeName}
+                         currentBpm={activeBpm}
+                         progress={progress}
+                         duration={duration}
+                         currentTime={currentTime}
+                    />
+                </div>
+            );
+        };
+
+        // --- Render ---
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
