@@ -128,7 +128,7 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useRef, useEffect, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipForward, SkipBack, FastForward, Rewind, Music, Activity, FolderOpen, Settings2, Trash2, Plus, Minus } from 'lucide-react';
+        import { Play, Pause, SkipForward, SkipBack, FastForward, Rewind, Music, Activity, FolderOpen, Settings2, Trash2, Plus, Minus, ChevronDown, ChevronUp } from 'lucide-react';
         import { analyze } from 'web-audio-beat-detector';
 
         // --- Services: Audio Utils ---
@@ -363,6 +363,7 @@
             const [currentTime, setCurrentTime] = useState(0);
             const [duration, setDuration] = useState(0);
             const [analyzingCount, setAnalyzingCount] = useState(0);
+            const [isBpmSettingsOpen, setIsBpmSettingsOpen] = useState(true);
 
             const audioRef = useRef(null);
             const processingQueueRef = useRef([]);
@@ -596,53 +597,66 @@
                             </div>
                         </div>
 
-                        <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 shadow-inner">
-                            <div className="flex items-center gap-2 text-brand-400 mb-4">
-                                <Settings2 size={16} />
-                                <span className="text-xs font-bold uppercase tracking-wider">BPM Range</span>
-                            </div>
+                        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-inner overflow-hidden">
+                            <button 
+                                onClick={() => setIsBpmSettingsOpen(!isBpmSettingsOpen)}
+                                className="w-full flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-800/50 transition-colors"
+                            >
+                                <div className="flex items-center gap-2 text-brand-400">
+                                    <Settings2 size={16} />
+                                    <span className="text-xs font-bold uppercase tracking-wider">BPM Range</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs font-mono text-slate-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                                        {bpmRange.min} - {bpmRange.max}
+                                    </span>
+                                    {isBpmSettingsOpen ? <ChevronUp size={18} className="text-slate-500" /> : <ChevronDown size={18} className="text-slate-500" />}
+                                </div>
+                            </button>
                             
-                            <div className="flex flex-col gap-3">
-                                {/* Min BPM Control */}
-                                <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl">
-                                    <span className="text-[10px] text-slate-400 font-bold uppercase w-16">Min BPM</span>
-                                    <div className="flex items-center gap-4">
-                                        <button 
-                                            className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
-                                            onClick={() => setBpmRange(p => ({...p, min: Math.max(60, p.min - 1)}))}
-                                        >
-                                            <Minus size={20} />
-                                        </button>
-                                        <span className="text-xl font-mono text-brand-400 font-bold w-12 text-center select-none">{bpmRange.min}</span>
-                                        <button 
-                                            className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
-                                            onClick={() => setBpmRange(p => ({...p, min: Math.min(p.max - 1, p.min + 1)}))}
-                                        >
-                                            <Plus size={20} />
-                                        </button>
+                            {isBpmSettingsOpen && (
+                                <div className="p-4 pt-0 border-t border-slate-800/50 flex flex-col gap-3 mt-3 pb-4">
+                                    {/* Min BPM Control */}
+                                    <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase w-16">Min BPM</span>
+                                        <div className="flex items-center gap-4">
+                                            <button 
+                                                className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
+                                                onClick={() => setBpmRange(p => ({...p, min: Math.max(60, p.min - 1)}))}
+                                            >
+                                                <Minus size={20} />
+                                            </button>
+                                            <span className="text-xl font-mono text-brand-400 font-bold w-12 text-center select-none">{bpmRange.min}</span>
+                                            <button 
+                                                className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
+                                                onClick={() => setBpmRange(p => ({...p, min: Math.min(p.max - 1, p.min + 1)}))}
+                                            >
+                                                <Plus size={20} />
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Max BPM Control */}
-                                <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl">
-                                    <span className="text-[10px] text-slate-400 font-bold uppercase w-16">Max BPM</span>
-                                    <div className="flex items-center gap-4">
-                                        <button 
-                                            className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
-                                            onClick={() => setBpmRange(p => ({...p, max: Math.max(p.min + 1, p.max - 1)}))}
-                                        >
-                                            <Minus size={20} />
-                                        </button>
-                                        <span className="text-xl font-mono text-brand-400 font-bold w-12 text-center select-none">{bpmRange.max}</span>
-                                        <button 
-                                            className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
-                                            onClick={() => setBpmRange(p => ({...p, max: Math.min(200, p.max + 1)}))}
-                                        >
-                                            <Plus size={20} />
-                                        </button>
+                                    {/* Max BPM Control */}
+                                    <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase w-16">Max BPM</span>
+                                        <div className="flex items-center gap-4">
+                                            <button 
+                                                className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
+                                                onClick={() => setBpmRange(p => ({...p, max: Math.max(p.min + 1, p.max - 1)}))}
+                                            >
+                                                <Minus size={20} />
+                                            </button>
+                                            <span className="text-xl font-mono text-brand-400 font-bold w-12 text-center select-none">{bpmRange.max}</span>
+                                            <button 
+                                                className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
+                                                onClick={() => setBpmRange(p => ({...p, max: Math.min(200, p.max + 1)}))}
+                                            >
+                                                <Plus size={20} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                         
                         {analyzingCount > 0 && (
