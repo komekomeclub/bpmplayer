@@ -37,12 +37,14 @@
     <style>
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      /* Increased thumb size for easier touch interaction */
       input[type="range"]::-webkit-slider-thumb {
         -webkit-appearance: none; appearance: none; background-color: #0ea5e9;
-        height: 1.25rem; width: 1.25rem; border-radius: 50%; cursor: pointer; margin-top: -0.25rem;
+        height: 1.5rem; width: 1.5rem; border-radius: 50%; cursor: pointer; margin-top: -0.35rem;
+        box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2);
       }
       input[type="range"]::-moz-range-thumb {
-        background-color: #0ea5e9; height: 1.25rem; width: 1.25rem; border-radius: 50%; border: none; cursor: pointer;
+        background-color: #0ea5e9; height: 1.5rem; width: 1.5rem; border-radius: 50%; border: none; cursor: pointer;
       }
       /* Prevent text selection for app-like feel */
       body { -webkit-user-select: none; user-select: none; }
@@ -126,7 +128,7 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useRef, useEffect, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipForward, SkipBack, FastForward, Rewind, Music, Activity, FolderOpen, Settings2, Trash2 } from 'lucide-react';
+        import { Play, Pause, SkipForward, SkipBack, FastForward, Rewind, Music, Activity, FolderOpen, Settings2, Trash2, ArrowDown, ArrowUp } from 'lucide-react';
         import { analyze } from 'web-audio-beat-detector';
 
         // --- Services: Audio Utils ---
@@ -559,8 +561,8 @@
             const activeBpm = activeSong ? activeSong.bpm : undefined;
 
             return (
-                <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-32">
-                    <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 py-4 shadow-xl">
+                <div className="h-[100dvh] flex flex-col bg-slate-950 text-slate-100 font-sans overflow-hidden">
+                    <header className="flex-none bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 py-4 shadow-xl z-40">
                         <div className="flex justify-between items-center mb-4">
                             <h1 className="text-2xl font-bold bg-gradient-to-r from-brand-400 to-indigo-400 bg-clip-text text-transparent">
                                 TempoFlow
@@ -595,37 +597,46 @@
                         </div>
 
                         <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 shadow-inner">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2 text-brand-400">
-                                    <Settings2 size={16} />
-                                    <span className="text-xs font-bold uppercase tracking-wider">BPM Range</span>
-                                </div>
-                                <div className="text-sm font-mono text-white bg-slate-800 px-2 py-1 rounded">
-                                    {bpmRange.min} - {bpmRange.max}
-                                </div>
+                            <div className="flex items-center gap-2 text-brand-400 mb-4">
+                                <Settings2 size={16} />
+                                <span className="text-xs font-bold uppercase tracking-wider">BPM Range</span>
                             </div>
-                            <div className="flex gap-4 items-center">
-                                <div className="flex-1">
+                            
+                            <div className="flex flex-col gap-6">
+                                {/* Min BPM */}
+                                <div className="w-full">
+                                    <div className="flex justify-between mb-2">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1">
+                                            Min BPM
+                                        </span>
+                                        <span className="text-sm font-mono text-brand-400 font-bold">{bpmRange.min}</span>
+                                    </div>
                                     <input 
                                         type="range" min="60" max="200" value={bpmRange.min}
                                         onChange={(e) => {
                                             const val = Number(e.target.value);
                                             setBpmRange(prev => ({ ...prev, min: Math.min(val, prev.max - 5) }));
                                         }}
-                                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer"
+                                        className="w-full h-4 bg-slate-800 rounded-lg appearance-none cursor-pointer"
                                     />
-                                    <div className="flex justify-between mt-1"><span className="text-[10px] text-slate-500">Slow (60)</span></div>
                                 </div>
-                                <div className="flex-1">
+
+                                {/* Max BPM */}
+                                <div className="w-full">
+                                    <div className="flex justify-between mb-2">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1">
+                                            Max BPM
+                                        </span>
+                                        <span className="text-sm font-mono text-brand-400 font-bold">{bpmRange.max}</span>
+                                    </div>
                                     <input 
                                         type="range" min="60" max="200" value={bpmRange.max}
                                         onChange={(e) => {
                                             const val = Number(e.target.value);
                                             setBpmRange(prev => ({ ...prev, max: Math.max(val, prev.min + 5) }));
                                         }}
-                                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer"
+                                        className="w-full h-4 bg-slate-800 rounded-lg appearance-none cursor-pointer"
                                     />
-                                     <div className="flex justify-between mt-1"><span className="text-[10px] text-slate-500"></span><span className="text-[10px] text-slate-500">Fast (200)</span></div>
                                 </div>
                             </div>
                         </div>
@@ -637,7 +648,7 @@
                         )}
                     </header>
 
-                    <main className="pt-2">
+                    <main className="flex-1 overflow-y-auto pt-2 scroll-smooth">
                          <TrackList 
                             songs={songs}
                             currentSongId={currentSongId}
