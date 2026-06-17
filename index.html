@@ -1,701 +1,473 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
-    <meta name="theme-color" content="#0f172a" />
-    <title>TempoFlow BPM Player</title>
-    
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              brand: {
-                50: '#f0f9ff',
-                100: '#e0f2fe',
-                400: '#38bdf8',
-                500: '#0ea5e9',
-                600: '#0284c7',
-                900: '#0c4a6e',
-                950: '#082f49',
-              }
-            },
-            animation: {
-              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-            }
-          }
-        }
-      }
-    </script>
-
-    <!-- React & Babel Setup for In-Browser Compilation -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <style>
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      /* Increased thumb size for easier touch interaction */
-      input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none; appearance: none; background-color: #0ea5e9;
-        height: 1.5rem; width: 1.5rem; border-radius: 50%; cursor: pointer; margin-top: -0.35rem;
-        box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2);
-      }
-      input[type="range"]::-moz-range-thumb {
-        background-color: #0ea5e9; height: 1.5rem; width: 1.5rem; border-radius: 50%; border: none; cursor: pointer;
-      }
-      /* Prevent text selection for app-like feel */
-      body { -webkit-user-select: none; user-select: none; }
-      
-      /* Error overlay styles */
-      #startup-error {
-          display: none;
-          position: fixed;
-          top: 0; left: 0; width: 100%; height: 100%;
-          background: #0f172a;
-          color: #ef4444;
-          z-index: 9999;
-          padding: 2rem;
-          overflow: auto;
-          font-family: monospace;
-      }
-    </style>
-
-    <!-- Import Map for Modules -->
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "lucide-react": "https://esm.sh/lucide-react@0.292.0",
-    "web-audio-beat-detector": "https://esm.sh/web-audio-beat-detector@8.2.9",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14171C">
+<title>ペース・プレーヤー</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#14171C;
+    --surface:#1E232B;
+    --surface-2:#262C35;
+    --accent:#FF8A3D;
+    --accent-ink:#1A1206;
+    --accent-2:#6EE7C9;
+    --text:#F2EFEA;
+    --text-muted:#8B9099;
+    --radius:18px;
+    --font-mono: ui-monospace, "SF Mono", "Roboto Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
-}
-</script>
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--font-sans); }
+  body{
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-top: env(safe-area-inset-top);
+  }
+  button{ font-family:inherit; cursor:pointer; touch-action:manipulation; }
+  input[type=range]{ touch-action:manipulation; }
 
-    <!-- Global Error Handler -->
-    <script>
-      window.addEventListener('error', function(event) {
-        const errorBox = document.getElementById('startup-error');
-        if (errorBox) {
-          errorBox.style.display = 'block';
-          const msg = document.createElement('div');
-          msg.style.marginBottom = '1rem';
-          msg.style.borderBottom = '1px solid #333';
-          msg.style.paddingBottom = '0.5rem';
-          msg.textContent = `Error: ${event.message} at ${event.filename}:${event.lineno}`;
-          errorBox.appendChild(msg);
-        }
-      });
-      
-      window.addEventListener('unhandledrejection', function(event) {
-        const errorBox = document.getElementById('startup-error');
-        if (errorBox) {
-            errorBox.style.display = 'block';
-            const msg = document.createElement('div');
-            msg.style.marginBottom = '1rem';
-            msg.textContent = `Promise Error: ${event.reason}`;
-            errorBox.appendChild(msg);
-        }
-      });
-    </script>
+  .app{ max-width:480px; margin:0 auto; padding:0 16px 32px; }
+
+  /* ---- top bar ---- */
+  .topbar{
+    padding:18px 4px 10px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .topbar-title{
+    font-size:15px; color:var(--text-muted);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  /* ---- speed hero ---- */
+  .speed-hero{
+    background:var(--surface);
+    border-radius:24px;
+    padding:22px 16px 20px;
+    margin-bottom:14px;
+    text-align:center;
+  }
+  .speed-label{
+    font-size:13px; letter-spacing:.08em; color:var(--text-muted);
+    text-transform:uppercase; margin-bottom:4px;
+  }
+  .speed-row{
+    display:flex; align-items:center; justify-content:center; gap:14px;
+    margin:6px 0 14px;
+  }
+  .speed-btn{
+    width:clamp(56px,16vw,72px); height:clamp(56px,16vw,72px);
+    border-radius:50%; border:none;
+    background:var(--surface-2); color:var(--text);
+    font-size:30px; font-weight:600; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    transition: transform .08s ease, background .15s ease;
+  }
+  .speed-btn:active{ transform:scale(.92); background:#30384a; }
+  .speed-display{
+    font-family:var(--font-mono);
+    font-size:clamp(60px,20vw,104px);
+    font-weight:700; line-height:1;
+    min-width:clamp(150px,42vw,260px);
+    font-variant-numeric: tabular-nums;
+    color:var(--accent);
+  }
+  .speed-unit{ font-size:.4em; color:var(--text-muted); margin-left:2px; font-weight:600; }
+  .speed-slider{
+    width:100%; height:44px; margin:4px 0 12px;
+    -webkit-appearance:none; appearance:none;
+    background:transparent;
+  }
+  .speed-slider::-webkit-slider-runnable-track{
+    height:10px; border-radius:6px; background:var(--surface-2);
+  }
+  .speed-slider::-webkit-slider-thumb{
+    -webkit-appearance:none; width:32px; height:32px; margin-top:-11px;
+    border-radius:50%; background:var(--accent); border:4px solid var(--bg);
+  }
+  .speed-slider::-moz-range-track{ height:10px; border-radius:6px; background:var(--surface-2); }
+  .speed-slider::-moz-range-thumb{
+    width:32px; height:32px; border-radius:50%; background:var(--accent); border:4px solid var(--bg);
+  }
+  .speed-presets{
+    display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:12px;
+  }
+  .preset-btn{
+    border:none; border-radius:999px; padding:9px 14px;
+    background:var(--surface-2); color:var(--text); font-size:14px; font-weight:600;
+    font-family:var(--font-mono);
+  }
+  .preset-btn.active{ background:var(--accent); color:var(--accent-ink); }
+  .reset-btn{
+    border:none; background:none; color:var(--text-muted);
+    font-size:13px; text-decoration:underline; padding:6px;
+  }
+
+  /* ---- transport ---- */
+  .transport{
+    display:flex; align-items:center; justify-content:center; gap:22px;
+    margin:18px 0 16px;
+  }
+  .transport-btn{
+    width:60px; height:60px; border-radius:50%; border:none;
+    background:var(--surface); color:var(--text); font-size:24px;
+    display:flex; align-items:center; justify-content:center;
+    transition: transform .08s ease;
+  }
+  .transport-btn:active{ transform:scale(.9); }
+  .play-btn{
+    width:88px; height:88px; border-radius:50%; border:none;
+    background:var(--accent); color:var(--accent-ink); font-size:34px;
+    display:flex; align-items:center; justify-content:center;
+    transition: transform .08s ease;
+  }
+  .play-btn:active{ transform:scale(.93); }
+
+  /* ---- seek ---- */
+  .seek{
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--font-mono); font-size:13px; color:var(--text-muted);
+    margin-bottom:10px;
+  }
+  .seek-slider{ flex:1; height:36px; -webkit-appearance:none; appearance:none; background:transparent; }
+  .seek-slider::-webkit-slider-runnable-track{ height:6px; border-radius:4px; background:var(--surface-2); }
+  .seek-slider::-webkit-slider-thumb{
+    -webkit-appearance:none; width:20px; height:20px; margin-top:-7px;
+    border-radius:50%; background:var(--accent-2); border:3px solid var(--bg);
+  }
+  .seek-slider::-moz-range-track{ height:6px; border-radius:4px; background:var(--surface-2); }
+  .seek-slider::-moz-range-thumb{ width:20px; height:20px; border-radius:50%; background:var(--accent-2); border:3px solid var(--bg); }
+
+  /* ---- volume ---- */
+  .volume{ display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+  .volume-icon{ font-size:16px; color:var(--text-muted); }
+  .volume-slider{ flex:1; height:32px; -webkit-appearance:none; appearance:none; background:transparent; }
+  .volume-slider::-webkit-slider-runnable-track{ height:6px; border-radius:4px; background:var(--surface-2); }
+  .volume-slider::-webkit-slider-thumb{
+    -webkit-appearance:none; width:18px; height:18px; margin-top:-6px;
+    border-radius:50%; background:var(--text-muted); border:3px solid var(--bg);
+  }
+  .volume-slider::-moz-range-track{ height:6px; border-radius:4px; background:var(--surface-2); }
+  .volume-slider::-moz-range-thumb{ width:18px; height:18px; border-radius:50%; background:var(--text-muted); border:3px solid var(--bg); }
+
+  /* ---- playlist ---- */
+  .playlist-section{ background:var(--surface); border-radius:20px; padding:16px; }
+  .playlist-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .playlist-header h2{ font-size:15px; margin:0; color:var(--text-muted); font-weight:600; }
+  .add-files-btn{
+    background:var(--surface-2); color:var(--text); font-size:13px; font-weight:600;
+    padding:9px 14px; border-radius:999px; cursor:pointer;
+  }
+  .repeat-row{ margin-bottom:8px; }
+  .repeat-btn{
+    border:none; background:var(--surface-2); color:var(--text-muted);
+    font-size:13px; padding:8px 12px; border-radius:999px;
+  }
+  .repeat-btn[aria-pressed="true"]{ background:var(--accent-2); color:#0E2E27; }
+  .playlist{ list-style:none; margin:0; padding:0; max-height:280px; overflow-y:auto; }
+  .playlist-item{
+    padding:13px 10px; border-radius:12px; font-size:14px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .playlist-item:active{ background:var(--surface-2); }
+  .playlist-item.active{ background:var(--surface-2); color:var(--accent); font-weight:600; }
+  .empty-msg{ color:var(--text-muted); font-size:13px; line-height:1.6; margin:6px 2px; }
+  .hint{ color:var(--text-muted); font-size:12px; line-height:1.6; text-align:center; margin:18px 4px 0; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; }
+  }
+</style>
 </head>
-<body class="bg-slate-950 text-slate-100 antialiased overflow-hidden">
-    <div id="root"></div>
-    <div id="startup-error">
-        <h2 class="text-xl font-bold mb-4 text-white">Startup Failed</h2>
-        <p class="text-slate-400 mb-4">Please check the errors below.</p>
-        <div id="protocol-warning" class="hidden mb-6 p-4 bg-yellow-900/30 border border-yellow-700 rounded text-yellow-200">
-            <strong>Warning:</strong> You seem to be running this file directly (file:// protocol). 
-            Modern web apps require a local server to load modules securely. 
-            <br/><br/>
-            Try installing a "Web Server" app on your phone and opening the file through that.
-        </div>
-    </div>
+<body>
+<div class="app">
 
-    <script>
-        if (window.location.protocol === 'file:') {
-            document.getElementById('startup-error').style.display = 'block';
-            document.getElementById('protocol-warning').classList.remove('hidden');
-        }
-    </script>
+  <header class="topbar">
+    <div class="topbar-title" id="trackTitle">トラック未選択</div>
+  </header>
 
-    <!-- Main Application Code -->
-    <script type="text/babel" data-type="module">
-        import React, { useState, useRef, useEffect, useCallback } from 'react';
-        import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipForward, SkipBack, FastForward, Rewind, Music, Activity, FolderOpen, Settings2, Trash2, Plus, Minus, ChevronDown, ChevronUp } from 'lucide-react';
-        import { analyze } from 'web-audio-beat-detector';
+  <main>
+    <section class="speed-hero" aria-label="再生速度">
+      <div class="speed-label">速度</div>
+      <div class="speed-row">
+        <button class="speed-btn" id="speedDown" aria-label="速度を1%下げる">−</button>
+        <div class="speed-display"><span id="speedNumber">100</span><span class="speed-unit">%</span></div>
+        <button class="speed-btn" id="speedUp" aria-label="速度を1%上げる">＋</button>
+      </div>
+      <input type="range" id="speedSlider" min="50" max="150" step="1" value="100" class="speed-slider" aria-label="速度スライダー">
+      <div class="speed-presets" id="speedPresets"></div>
+      <button class="reset-btn" id="speedReset">100%にリセット</button>
+    </section>
 
-        // --- Services: Audio Utils ---
+    <section class="transport" aria-label="再生コントロール">
+      <button class="transport-btn" id="prevBtn" aria-label="前のトラック">⏮</button>
+      <button class="play-btn" id="playBtn" aria-label="再生">▶</button>
+      <button class="transport-btn" id="nextBtn" aria-label="次のトラック">⏭</button>
+    </section>
 
-        let sharedAudioContext = null;
+    <section class="seek" aria-label="シークバー">
+      <span id="currentTime">0:00</span>
+      <input type="range" id="seekSlider" min="0" max="0" step="1" value="0" class="seek-slider" aria-label="再生位置">
+      <span id="durationTime">0:00</span>
+    </section>
 
-        const getAudioContext = () => {
-            if (!sharedAudioContext) {
-                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-                sharedAudioContext = new AudioContextClass();
-            }
-            return sharedAudioContext;
-        };
+    <section class="volume" aria-label="音量">
+      <span class="volume-icon">🔊</span>
+      <input type="range" id="volumeSlider" min="0" max="100" step="1" value="100" class="volume-slider" aria-label="音量">
+    </section>
 
-        const detectBpm = async (file) => {
-            const audioCtx = getAudioContext();
-            
-            // Ensure context is running (important for some browsers)
-            if (audioCtx.state === 'suspended') {
-                try {
-                    await audioCtx.resume();
-                } catch (e) {
-                    console.warn("Could not resume audio context automatically", e);
-                }
-            }
+    <section class="playlist-section" aria-label="プレイリスト">
+      <div class="playlist-header">
+        <h2>プレイリスト</h2>
+        <label class="add-files-btn">
+          ファイルを追加
+          <input type="file" id="fileInput" accept="audio/*" multiple hidden>
+        </label>
+      </div>
+      <div class="repeat-row">
+        <button id="repeatBtn" class="repeat-btn" aria-pressed="false">🔁 リピート: オフ</button>
+      </div>
+      <ul id="playlist" class="playlist"></ul>
+      <p class="empty-msg" id="emptyMsg">音声ファイルがまだ選択されていません。「ファイルを追加」から選んでください。</p>
+    </section>
 
-            try {
-                const bpmPromise = (async () => {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-                    const bpm = await analyze(audioBuffer);
-                    return Math.round(bpm);
-                })();
+    <p class="hint">画面をロックしても再生は続きます。ブラウザのタブを完全に閉じない限り再生が継続します。</p>
+  </main>
 
-                // 30 seconds timeout
-                const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error("Analysis timed out (30s)")), 30000);
-                });
+  <audio id="audio" preload="auto"></audio>
+</div>
 
-                return await Promise.race([bpmPromise, timeoutPromise]);
-            } catch (e) {
-                console.error("BPM Detection failed for file:", file.name, e);
-                return 0;
-            }
-        };
+<script>
+(function(){
+  const audio = document.getElementById('audio');
+  const trackTitleEl = document.getElementById('trackTitle');
 
-        // --- Components: PlayerControls ---
+  const speedNumber = document.getElementById('speedNumber');
+  const speedSlider = document.getElementById('speedSlider');
+  const speedDown = document.getElementById('speedDown');
+  const speedUp = document.getElementById('speedUp');
+  const speedReset = document.getElementById('speedReset');
+  const speedPresets = document.getElementById('speedPresets');
 
-        const PlayerControls = ({
-            isPlaying,
-            onPlayPause,
-            onNext,
-            onPrev,
-            onSeek,
-            currentSongName,
-            currentBpm,
-            progress,
-            duration,
-            currentTime
-        }) => {
-            const formatTime = (time) => {
-                if (isNaN(time)) return "0:00";
-                const m = Math.floor(time / 60);
-                const s = Math.floor(time % 60);
-                return `${m}:${s < 10 ? '0' : ''}${s}`;
-            };
-            
-            // Ensure values are strings or numbers, never objects
-            const displayName = typeof currentSongName === 'string' ? currentSongName : "No song selected";
-            const displayBpm = typeof currentBpm === 'number' && currentBpm > 0 ? `${currentBpm} BPM` : '-- BPM';
+  const prevBtn = document.getElementById('prevBtn');
+  const playBtn = document.getElementById('playBtn');
+  const nextBtn = document.getElementById('nextBtn');
 
-            return (
-                <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 pb-safe pt-2 px-4 shadow-2xl z-50 pb-6 md:pb-2">
-                    <div className="flex justify-between items-center mb-2 px-1">
-                        <div className="overflow-hidden w-2/3">
-                            <h3 className="text-white font-medium truncate text-sm">
-                                {displayName}
-                            </h3>
-                            <p className="text-brand-400 text-xs font-bold">
-                                {displayBpm}
-                            </p>
-                        </div>
-                        <div className="text-slate-400 text-xs font-mono">
-                           {formatTime(currentTime)} / {formatTime(duration)}
-                        </div>
-                    </div>
+  const seekSlider = document.getElementById('seekSlider');
+  const currentTimeEl = document.getElementById('currentTime');
+  const durationTimeEl = document.getElementById('durationTime');
 
-                    <div className="w-full h-1 bg-slate-800 rounded-full mb-4 relative overflow-hidden">
-                        <div 
-                            className="absolute top-0 left-0 h-full bg-brand-500 transition-all duration-300 ease-linear"
-                            style={{ width: `${progress}%` }}
-                        />
-                    </div>
+  const volumeSlider = document.getElementById('volumeSlider');
 
-                    <div className="flex justify-between items-center mb-4 max-w-md mx-auto w-full px-2">
-                        <button 
-                            onClick={() => onSeek(-5)}
-                            className="text-slate-400 hover:text-white transition-colors flex flex-col items-center gap-1 active:scale-90"
-                        >
-                            <Rewind size={20} />
-                            <span className="text-[10px]">-5s</span>
-                        </button>
+  const fileInput = document.getElementById('fileInput');
+  const playlistEl = document.getElementById('playlist');
+  const emptyMsg = document.getElementById('emptyMsg');
+  const repeatBtn = document.getElementById('repeatBtn');
 
-                         <button 
-                            onClick={onPrev}
-                            className="text-slate-300 hover:text-white transition-colors active:scale-90"
-                        >
-                            <SkipBack size={28} />
-                        </button>
+  let playlist = [];      // { name, url }
+  let currentIndex = -1;
+  let isSeeking = false;
+  let repeatAll = false;
 
-                        <button 
-                            onClick={onPlayPause}
-                            className="w-14 h-14 bg-brand-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-brand-500/30 active:scale-95 transition-transform"
-                        >
-                            {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1"/>}
-                        </button>
+  // ピッチを変えずに速度だけ変える(対応ブラウザではデフォルトでtrueだが明示しておく)
+  audio.preservesPitch = true;
+  audio.mozPreservesPitch = true;
+  audio.webkitPreservesPitch = true;
 
-                        <button 
-                            onClick={onNext}
-                            className="text-slate-300 hover:text-white transition-colors active:scale-90"
-                        >
-                            <SkipForward size={28} />
-                        </button>
+  function formatTime(sec){
+    if(!isFinite(sec) || sec < 0) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60).toString().padStart(2,'0');
+    return m + ':' + s;
+  }
 
-                        <button 
-                            onClick={() => onSeek(5)}
-                            className="text-slate-400 hover:text-white transition-colors flex flex-col items-center gap-1 active:scale-90"
-                        >
-                            <FastForward size={20} />
-                            <span className="text-[10px]">+5s</span>
-                        </button>
-                    </div>
-                </div>
-            );
-        };
+  function currentSpeedValue(){
+    return Number(speedSlider.value);
+  }
 
-        // --- Components: TrackList (Renamed from SongList) ---
+  function applySpeed(value){
+    value = Math.min(150, Math.max(50, Math.round(Number(value))));
+    audio.playbackRate = value / 100;
+    audio.preservesPitch = true;
+    audio.mozPreservesPitch = true;
+    audio.webkitPreservesPitch = true;
+    speedNumber.textContent = value;
+    speedSlider.value = value;
+    speedPresets.querySelectorAll('.preset-btn').forEach(function(btn){
+      btn.classList.toggle('active', Number(btn.dataset.speed) === value);
+    });
+  }
 
-        const TrackList = ({ songs, currentSongId, isPlaying, onSelect, minBpm, maxBpm }) => {
-            // Strictly primitive filtering
-            const matchedSongs = songs.filter(song => 
-                song.status === 'done' && 
-                song.bpm !== null && 
-                song.bpm >= minBpm && 
-                song.bpm <= maxBpm
-            );
-            
-            const otherSongs = songs.filter(song => 
-                !matchedSongs.includes(song)
-            );
+  // プリセットチップ生成
+  [60, 80, 100, 120, 140].forEach(function(v){
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn' + (v === 100 ? ' active' : '');
+    btn.dataset.speed = v;
+    btn.textContent = v + '%';
+    btn.addEventListener('click', function(){ applySpeed(v); });
+    speedPresets.appendChild(btn);
+  });
 
-            const renderRow = (song, isDimmed) => {
-                const isCurrent = song.id === currentSongId;
-                const isAnalyzing = song.status === 'analyzing';
-                
-                return (
-                    <div 
-                        key={song.id}
-                        onClick={() => !isAnalyzing && onSelect(song)}
-                        className={`
-                            flex items-center p-3 mb-2 rounded-xl transition-all
-                            ${isCurrent ? 'bg-brand-900/40 border border-brand-500/30' : 'bg-slate-900 border border-slate-800'}
-                            ${isAnalyzing ? 'opacity-70 cursor-wait' : 'cursor-pointer active:scale-[0.98]'}
-                            ${isDimmed && !isCurrent ? 'opacity-40 grayscale' : ''}
-                        `}
-                    >
-                        <div className={`
-                            w-10 h-10 rounded-full flex items-center justify-center mr-3 shrink-0
-                            ${isCurrent ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-400'}
-                        `}>
-                            {isCurrent && isPlaying ? <Activity size={18} className="animate-pulse" /> : <Music size={18} />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h4 className={`text-sm font-medium truncate ${isCurrent ? 'text-brand-200' : 'text-slate-200'}`}>
-                                {song.name}
-                            </h4>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                {song.status === 'analyzing' ? (
-                                    <span className="text-xs text-brand-400 flex items-center gap-1">Analyzing...</span>
-                                ) : song.status === 'error' ? (
-                                    <span className="text-xs text-red-400">Failed</span>
-                                ) : (
-                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${isCurrent ? 'bg-brand-500/20 text-brand-300' : 'bg-slate-800 text-slate-400'}`}>
-                                        {song.bpm ? `${song.bpm} BPM` : 'Unknown'}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
+  speedDown.addEventListener('click', function(){ applySpeed(currentSpeedValue() - 1); });
+  speedUp.addEventListener('click', function(){ applySpeed(currentSpeedValue() + 1); });
+  speedSlider.addEventListener('input', function(){ applySpeed(speedSlider.value); });
+  speedReset.addEventListener('click', function(){ applySpeed(100); });
 
-            if (songs.length === 0) {
-                return (
-                    <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-                        <Music size={48} className="mb-4 opacity-20" />
-                        <p>No songs loaded.</p>
-                    </div>
-                );
-            }
+  function loadTrack(index, autoplay){
+    if(index < 0 || index >= playlist.length) return;
+    currentIndex = index;
+    const track = playlist[index];
+    audio.src = track.url;
+    audio.playbackRate = currentSpeedValue() / 100;
+    audio.preservesPitch = true;
+    audio.mozPreservesPitch = true;
+    audio.webkitPreservesPitch = true;
+    audio.volume = Number(volumeSlider.value) / 100;
+    trackTitleEl.textContent = track.name;
+    renderPlaylist();
+    updateMediaSessionMetadata(track.name);
+    if(autoplay){
+      audio.play().catch(function(){ /* ユーザー操作待ち */ });
+    }
+  }
 
-            return (
-                <div className="pb-48 px-4">
-                    {matchedSongs.length > 0 && (
-                        <div className="mb-6">
-                            <h3 className="text-brand-400 text-xs font-bold uppercase tracking-wider mb-3 ml-1">
-                                Playing ({minBpm} - {maxBpm} BPM)
-                            </h3>
-                            {matchedSongs.map(s => renderRow(s, false))}
-                        </div>
-                    )}
-                    {otherSongs.length > 0 && (
-                        <div>
-                            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-3 ml-1">
-                                {matchedSongs.length > 0 ? "Skipped / Processing" : "All Songs"}
-                            </h3>
-                            {otherSongs.map(s => renderRow(s, matchedSongs.length > 0))}
-                        </div>
-                    )}
-                </div>
-            );
-        };
+  function togglePlay(){
+    if(playlist.length === 0) return;
+    if(currentIndex === -1){
+      loadTrack(0, true);
+      return;
+    }
+    if(audio.paused){
+      audio.play().catch(function(){});
+    } else {
+      audio.pause();
+    }
+  }
 
-        // --- Main App Component ---
+  playBtn.addEventListener('click', togglePlay);
 
-        const App = () => {
-            const [songs, setSongs] = useState([]);
-            const [bpmRange, setBpmRange] = useState({ min: 100, max: 130 });
-            const [currentSongId, setCurrentSongId] = useState(null);
-            const [isPlaying, setIsPlaying] = useState(false);
-            const [progress, setProgress] = useState(0);
-            const [currentTime, setCurrentTime] = useState(0);
-            const [duration, setDuration] = useState(0);
-            const [analyzingCount, setAnalyzingCount] = useState(0);
-            const [isBpmSettingsOpen, setIsBpmSettingsOpen] = useState(true);
+  audio.addEventListener('play', function(){
+    playBtn.textContent = '⏸';
+    playBtn.setAttribute('aria-label', '一時停止');
+    if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+  });
+  audio.addEventListener('pause', function(){
+    playBtn.textContent = '▶';
+    playBtn.setAttribute('aria-label', '再生');
+    if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  });
 
-            const audioRef = useRef(null);
-            const processingQueueRef = useRef([]);
-            const isProcessingRef = useRef(false);
+  prevBtn.addEventListener('click', function(){
+    if(playlist.length === 0) return;
+    let idx = currentIndex - 1;
+    if(idx < 0) idx = repeatAll ? playlist.length - 1 : 0;
+    loadTrack(idx, true);
+  });
 
-            useEffect(() => {
-                const audio = new Audio();
-                audio.preload = "auto";
-                audioRef.current = audio;
+  nextBtn.addEventListener('click', function(){
+    if(playlist.length === 0) return;
+    let idx = currentIndex + 1;
+    if(idx >= playlist.length){
+      if(!repeatAll) return;
+      idx = 0;
+    }
+    loadTrack(idx, true);
+  });
 
-                const updateTime = () => {
-                    if (!audioRef.current) return;
-                    setCurrentTime(audioRef.current.currentTime);
-                    setDuration(audioRef.current.duration || 0);
-                    if (audioRef.current.duration) {
-                        setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
-                    }
-                };
+  audio.addEventListener('ended', function(){
+    let idx = currentIndex + 1;
+    if(idx >= playlist.length){
+      if(repeatAll){ loadTrack(0, true); }
+      return;
+    }
+    loadTrack(idx, true);
+  });
 
-                const handleEnded = () => playNext();
+  audio.addEventListener('loadedmetadata', function(){
+    durationTimeEl.textContent = formatTime(audio.duration);
+    seekSlider.max = Math.floor(audio.duration) || 0;
+  });
 
-                audio.addEventListener('timeupdate', updateTime);
-                audio.addEventListener('ended', handleEnded);
-                audio.addEventListener('error', (e) => console.error("Audio playback error", e));
+  audio.addEventListener('timeupdate', function(){
+    if(isSeeking) return;
+    seekSlider.value = Math.floor(audio.currentTime);
+    currentTimeEl.textContent = formatTime(audio.currentTime);
+  });
 
-                if ('mediaSession' in navigator) {
-                    navigator.mediaSession.setActionHandler('play', () => { audio.play(); setIsPlaying(true); });
-                    navigator.mediaSession.setActionHandler('pause', () => { audio.pause(); setIsPlaying(false); });
-                    navigator.mediaSession.setActionHandler('previoustrack', playPrev);
-                    navigator.mediaSession.setActionHandler('nexttrack', playNext);
-                    navigator.mediaSession.setActionHandler('seekbackward', () => seekRelative(-5));
-                    navigator.mediaSession.setActionHandler('seekforward', () => seekRelative(5));
-                }
+  seekSlider.addEventListener('input', function(){
+    isSeeking = true;
+    currentTimeEl.textContent = formatTime(Number(seekSlider.value));
+  });
+  seekSlider.addEventListener('change', function(){
+    audio.currentTime = Number(seekSlider.value);
+    isSeeking = false;
+  });
 
-                return () => {
-                    audio.pause();
-                    audio.removeEventListener('timeupdate', updateTime);
-                    audio.removeEventListener('ended', handleEnded);
-                    audioRef.current = null;
-                };
-            }, []);
+  volumeSlider.addEventListener('input', function(){
+    audio.volume = Number(volumeSlider.value) / 100;
+  });
 
-            useEffect(() => {
-                const active = songs.find(s => s.id === currentSongId);
-                if (active && 'mediaSession' in navigator) {
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                        title: active.name,
-                        artist: `${active.bpm ? active.bpm + ' BPM' : 'Analyzing...'}`,
-                        album: 'TempoFlow',
-                    });
-                }
-            }, [currentSongId, songs]);
+  repeatBtn.addEventListener('click', function(){
+    repeatAll = !repeatAll;
+    repeatBtn.textContent = repeatAll ? '🔁 リピート: オン' : '🔁 リピート: オフ';
+    repeatBtn.setAttribute('aria-pressed', String(repeatAll));
+  });
 
-            const getFilteredPlaylist = useCallback(() => {
-                return songs.filter(s => 
-                    s.bpm !== null && 
-                    s.bpm >= bpmRange.min && 
-                    s.bpm <= bpmRange.max &&
-                    s.status === 'done'
-                );
-            }, [songs, bpmRange]);
+  function renderPlaylist(){
+    playlistEl.innerHTML = '';
+    playlist.forEach(function(track, i){
+      const li = document.createElement('li');
+      li.className = 'playlist-item' + (i === currentIndex ? ' active' : '');
+      li.textContent = (i + 1) + '. ' + track.name;
+      li.addEventListener('click', function(){ loadTrack(i, true); });
+      playlistEl.appendChild(li);
+    });
+  }
 
-            const playSong = async (song) => {
-                if (!audioRef.current) return;
-                try {
-                    // Start/Resume AudioContext on user interaction (playback)
-                    const audioCtx = getAudioContext();
-                    if (audioCtx.state === 'suspended') {
-                        audioCtx.resume();
-                    }
+  fileInput.addEventListener('change', function(e){
+    const files = Array.from(e.target.files || []);
+    files.forEach(function(file){
+      playlist.push({
+        name: file.name.replace(/\.[^.]+$/, ''),
+        url: URL.createObjectURL(file)
+      });
+    });
+    emptyMsg.style.display = playlist.length ? 'none' : 'block';
+    renderPlaylist();
+    if(currentIndex === -1 && playlist.length > 0){
+      loadTrack(0, false);
+    }
+    fileInput.value = '';
+  });
 
-                    if (currentSongId !== song.id) {
-                        audioRef.current.src = song.url;
-                        setCurrentSongId(song.id);
-                    }
-                    await audioRef.current.play();
-                    setIsPlaying(true);
-                } catch (e) {
-                    console.error("Playback error", e);
-                }
-            };
+  // ロック画面・通知からの最低限の操作にも対応(対応ブラウザのみ・任意)
+  function updateMediaSessionMetadata(title){
+    if('mediaSession' in navigator){
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: title,
+        artist: 'ペース・プレーヤー'
+      });
+    }
+  }
+  if('mediaSession' in navigator){
+    navigator.mediaSession.setActionHandler('play', function(){ audio.play().catch(function(){}); });
+    navigator.mediaSession.setActionHandler('pause', function(){ audio.pause(); });
+    navigator.mediaSession.setActionHandler('previoustrack', function(){ prevBtn.click(); });
+    navigator.mediaSession.setActionHandler('nexttrack', function(){ nextBtn.click(); });
+    try{
+      navigator.mediaSession.setActionHandler('seekto', function(details){
+        if(details.fastSeek && 'fastSeek' in audio){ audio.fastSeek(details.seekTime); return; }
+        audio.currentTime = details.seekTime;
+      });
+    }catch(e){ /* 未対応ブラウザは無視 */ }
+  }
 
-            const playNext = useCallback(() => {
-                const playlist = getFilteredPlaylist();
-                if (playlist.length === 0) return;
-                const currentIndex = playlist.findIndex(s => s.id === currentSongId);
-                let nextIndex = (currentIndex !== -1) ? (currentIndex + 1) % playlist.length : 0;
-                playSong(playlist[nextIndex]);
-            }, [currentSongId, getFilteredPlaylist]);
+  // 画面オフ・タブのバックグラウンド化で再生を止めない
+  // (visibilitychange 等で pause() を呼ぶ処理は意図的に入れていません)
 
-            const playPrev = useCallback(() => {
-                const playlist = getFilteredPlaylist();
-                if (playlist.length === 0) return;
-                const currentIndex = playlist.findIndex(s => s.id === currentSongId);
-                let prevIndex = (currentIndex !== -1) ? (currentIndex - 1 + playlist.length) % playlist.length : playlist.length - 1;
-                playSong(playlist[prevIndex]);
-            }, [currentSongId, getFilteredPlaylist]);
-
-            const seekRelative = (seconds) => {
-                if (audioRef.current) {
-                    audioRef.current.currentTime = Math.min(Math.max(audioRef.current.currentTime + seconds, 0), audioRef.current.duration);
-                }
-            };
-
-            const togglePlayPause = () => {
-                if (!audioRef.current) return;
-                if (isPlaying) {
-                    audioRef.current.pause();
-                    setIsPlaying(false);
-                } else {
-                    if (!currentSongId) playNext();
-                    else {
-                        audioRef.current.play();
-                        setIsPlaying(true);
-                    }
-                }
-            };
-
-            const clearPlaylist = () => {
-                if (audioRef.current) {
-                    audioRef.current.pause();
-                    audioRef.current.src = "";
-                }
-                setSongs([]);
-                setCurrentSongId(null);
-                setIsPlaying(false);
-                setProgress(0);
-                setCurrentTime(0);
-                setDuration(0);
-                processingQueueRef.current = [];
-                setAnalyzingCount(0);
-            };
-
-            const processQueue = async () => {
-                if (processingQueueRef.current.length === 0) {
-                    isProcessingRef.current = false;
-                    setAnalyzingCount(0);
-                    return;
-                }
-                isProcessingRef.current = true;
-                const songToProcess = processingQueueRef.current[0];
-                setAnalyzingCount(processingQueueRef.current.length);
-                
-                setSongs(prev => prev.map(s => s.id === songToProcess.id ? { ...s, status: 'analyzing' } : s));
-
-                try {
-                    const bpm = await detectBpm(songToProcess.file);
-                    if (bpm > 0) {
-                        setSongs(prev => prev.map(s => s.id === songToProcess.id ? { ...s, bpm, status: 'done' } : s));
-                    } else {
-                        throw new Error("BPM 0");
-                    }
-                } catch (e) {
-                    setSongs(prev => prev.map(s => s.id === songToProcess.id ? { ...s, status: 'error' } : s));
-                } finally {
-                    processingQueueRef.current.shift();
-                    setTimeout(processQueue, 50);
-                }
-            };
-
-            const handleFileUpload = (event) => {
-                const files = event.target.files;
-                if (!files || files.length === 0) return;
-
-                // Important for iOS: Initialize AudioContext on user interaction (file select)
-                const ctx = getAudioContext();
-                if (ctx.state === 'suspended') {
-                    ctx.resume().catch(e => console.warn("Auto-resume failed", e));
-                }
-
-                const newSongs = [];
-                const queue = [];
-                Array.from(files).forEach((file) => {
-                    if (file.type.startsWith('audio/') || file.name.endsWith('.mp3') || file.name.endsWith('.wav')) {
-                        const song = {
-                            id: Math.random().toString(36).substring(7),
-                            file,
-                            name: file.name.replace(/\.[^/.]+$/, ""),
-                            url: URL.createObjectURL(file),
-                            bpm: null,
-                            status: 'pending',
-                            duration: 0
-                        };
-                        newSongs.push(song);
-                        queue.push(song);
-                    }
-                });
-                setSongs(prev => [...prev, ...newSongs]);
-                processingQueueRef.current = [...processingQueueRef.current, ...queue];
-                if (!isProcessingRef.current) processQueue();
-            };
-
-            // Calculate active song primitives for render
-            const activeSong = songs.find(s => s.id === currentSongId);
-            const activeName = activeSong ? activeSong.name : "";
-            const activeBpm = activeSong ? activeSong.bpm : undefined;
-
-            return (
-                <div className="h-[100dvh] flex flex-col bg-slate-950 text-slate-100 font-sans overflow-hidden">
-                    <header className="flex-none bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 py-4 shadow-xl z-40">
-                        <div className="flex justify-between items-center mb-4">
-                            <h1 className="text-2xl font-bold bg-gradient-to-r from-brand-400 to-indigo-400 bg-clip-text text-transparent">
-                                TempoFlow
-                            </h1>
-                            <div className="flex items-center gap-2">
-                                {songs.length > 0 && (
-                                    <button 
-                                        onClick={clearPlaylist}
-                                        className="flex items-center gap-2 bg-slate-800 hover:bg-red-900/30 text-slate-300 hover:text-red-400 px-3 py-2 rounded-full text-xs sm:text-sm font-medium transition-colors border border-slate-700"
-                                    >
-                                        <Trash2 size={16} />
-                                        <span className="hidden sm:inline">Clear</span>
-                                    </button>
-                                )}
-                                <div className="relative overflow-hidden">
-                                    <input 
-                                        type="file" 
-                                        id="folder-upload"
-                                        className="hidden"
-                                        onChange={handleFileUpload}
-                                        webkitdirectory="" directory="" multiple=""
-                                    />
-                                    <label 
-                                        htmlFor="folder-upload"
-                                        className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-colors cursor-pointer shadow-lg shadow-brand-900/50"
-                                    >
-                                        <FolderOpen size={16} />
-                                        <span>Open Folder</span>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-inner overflow-hidden">
-                            <button 
-                                onClick={() => setIsBpmSettingsOpen(!isBpmSettingsOpen)}
-                                className="w-full flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-800/50 transition-colors"
-                            >
-                                <div className="flex items-center gap-2 text-brand-400">
-                                    <Settings2 size={16} />
-                                    <span className="text-xs font-bold uppercase tracking-wider">BPM Range</span>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-xs font-mono text-slate-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">
-                                        {bpmRange.min} - {bpmRange.max}
-                                    </span>
-                                    {isBpmSettingsOpen ? <ChevronUp size={18} className="text-slate-500" /> : <ChevronDown size={18} className="text-slate-500" />}
-                                </div>
-                            </button>
-                            
-                            {isBpmSettingsOpen && (
-                                <div className="p-4 pt-0 border-t border-slate-800/50 flex flex-col gap-3 mt-3 pb-4">
-                                    {/* Min BPM Control */}
-                                    <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl">
-                                        <span className="text-[10px] text-slate-400 font-bold uppercase w-16">Min BPM</span>
-                                        <div className="flex items-center gap-4">
-                                            <button 
-                                                className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
-                                                onClick={() => setBpmRange(p => ({...p, min: Math.max(60, p.min - 1)}))}
-                                            >
-                                                <Minus size={20} />
-                                            </button>
-                                            <span className="text-xl font-mono text-brand-400 font-bold w-12 text-center select-none">{bpmRange.min}</span>
-                                            <button 
-                                                className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
-                                                onClick={() => setBpmRange(p => ({...p, min: Math.min(p.max - 1, p.min + 1)}))}
-                                            >
-                                                <Plus size={20} />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Max BPM Control */}
-                                    <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl">
-                                        <span className="text-[10px] text-slate-400 font-bold uppercase w-16">Max BPM</span>
-                                        <div className="flex items-center gap-4">
-                                            <button 
-                                                className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
-                                                onClick={() => setBpmRange(p => ({...p, max: Math.max(p.min + 1, p.max - 1)}))}
-                                            >
-                                                <Minus size={20} />
-                                            </button>
-                                            <span className="text-xl font-mono text-brand-400 font-bold w-12 text-center select-none">{bpmRange.max}</span>
-                                            <button 
-                                                className="w-10 h-10 flex items-center justify-center bg-slate-700 rounded-lg hover:bg-slate-600 active:bg-brand-600 transition-colors"
-                                                onClick={() => setBpmRange(p => ({...p, max: Math.min(200, p.max + 1)}))}
-                                            >
-                                                <Plus size={20} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        
-                        {analyzingCount > 0 && (
-                             <div className="mt-2 text-xs text-brand-400 animate-pulse text-center">
-                                Analyzing queue: {analyzingCount} songs remaining...
-                             </div>
-                        )}
-                    </header>
-
-                    <main className="flex-1 overflow-y-auto pt-2 scroll-smooth">
-                         <TrackList 
-                            songs={songs}
-                            currentSongId={currentSongId}
-                            isPlaying={isPlaying}
-                            onSelect={playSong}
-                            minBpm={bpmRange.min}
-                            maxBpm={bpmRange.max}
-                         />
-                    </main>
-
-                    <PlayerControls 
-                         isPlaying={isPlaying}
-                         onPlayPause={togglePlayPause}
-                         onNext={playNext}
-                         onPrev={playPrev}
-                         onSeek={seekRelative}
-                         currentSongName={activeName}
-                         currentBpm={activeBpm}
-                         progress={progress}
-                         duration={duration}
-                         currentTime={currentTime}
-                    />
-                </div>
-            );
-        };
-
-        // --- Render ---
-        const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+})();
+</script>
 </body>
 </html>
